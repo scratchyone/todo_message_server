@@ -1,0 +1,24 @@
+[package]
+name = "todo"
+version = "0.1.0"
+authors = ["scrat"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+rocket = { version = "0.4.4", default-features = false }
+anyhow = "1.0.28"
+serde = { version = "1.0.106", features = ["derive"] }
+serde_json = "1.0.52"
+rust-argon2 = "0.8.2"
+uuid = { version = "0.8.1", features = ["v4"] }
+rocket_cors = "0.5.2"
+fast_chemail = "0.9.6"
+lettre = "0.9.3"
+lettre_email = "0.9.4"
+mongodb = "0.10.0"
+
+[dependencies.rocket_contrib]
+version = "0.4.4"
+features = ["mongodb_pool"]

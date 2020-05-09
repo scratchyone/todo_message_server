@@ -51,7 +51,7 @@ fn add_message(data: Json<AddRequest>) -> Json<serde_json::Value> {
             client
                 .execute(
                     "INSERT INTO messages VALUES ($1, $2, $3)",
-                    &[&data.message, &data.block, &uuid],
+                    &[&data.message, &uuid, &data.block],
                 )
                 .unwrap();
         }

@@ -15,73 +15,48 @@ use std::{thread, time};
 use uuid::Uuid;
 
 #[derive(Serialize, Deserialize)]
-struct UsersRequest {
+struct AddRequest {
     token: String,
-}
-#[derive(Serialize, Deserialize)]
-struct UserRequest {
-    token: String,
-    username: String,
-}
-#[derive(Serialize, Deserialize)]
-struct Todo {
-    username: String,
-    todo: String,
-    done: bool,
-    id: String,
+    message: String,
+    block: bool,
 }
 #[get("/")]
 fn index() -> &'static str {
     "online"
 }
-#[post("/users", format = "application/json", data = "<data>")]
-fn users(data: Json<UsersRequest>) -> Json<serde_json::Value> {
+#[get("/messages", format = "application/json")]
+fn messages() -> Json<serde_json::Value> {
     let mut client = Client::connect("host=db user=postgres password=example", NoTls).unwrap();
-    if let Ok(_) = client.query_one(
-        "SELECT * FROM tokens WHERE token = $1 AND username = 'admin'",
-        &[&data.token],
-    ) {
-        let users: Vec<String> = client
-            .query("SELECT username FROM users", &[])
-            .unwrap()
-            .iter()
-            .map(|x| x.get("username"))
-            .collect();
-        Json(serde_json::json!({
-            "error": false,
-            "users": users
-        }))
-    } else {
-        Json(serde_json::json!({
-            "error": true,
-            "error_message": "Invalid token"
-        }))
+    let messages = client.query("SELECT * FROM messages", &[]).unwrap();
+    let mut msgs = vec![];
+    for msg in messages {
+        msgs.push(serde_json::json!(
+            {"text":msg.get::<&str, String>("message"),
+            "uuid":msg.get::<&str, String>("uuid"),
+            "block": msg.get::<&str, bool>("block")}
+        ));
     }
+    Json(serde_json::json!({ "messages": msgs }))
 }
-#[post("/user", format = "application/json", data = "<data>")]
-fn user(data: Json<UserRequest>) -> Json<serde_json::Value> {
+#[post("/add_message", format = "application/json", data = "<data>")]
+fn add_message(data: Json<AddRequest>) -> Json<serde_json::Value> {
     let mut client = Client::connect("host=db user=postgres password=example", NoTls).unwrap();
     if let Ok(_) = client.query_one(
         "SELECT * FROM tokens WHERE token = $1 AND username = 'admin'",
         &[&data.token],
     ) {
-        let users: Vec<Todo> = client
-            .query(
-                "SELECT * FROM todos WHERE username = $1 ORDER BY num",
-                &[&data.username],
-            )
-            .unwrap()
-            .iter()
-            .map(|x| Todo {
-                username: x.get("username"),
-                todo: x.get("todo"),
-                done: x.get("done"),
-                id: x.get("id"),
-            })
-            .collect();
+        let uuid = Uuid::new_v4().to_string();
+        client.execute("DELETE FROM messages", &[]).unwrap();
+        if data.message != "" {
+            client
+                .execute(
+                    "INSERT INTO messages VALUES ($1, $2, $3)",
+                    &[&data.message, &data.block, &uuid],
+                )
+                .unwrap();
+        }
         Json(serde_json::json!({
-            "error": false,
-            "users": users
+            "error": false
         }))
     } else {
         Json(serde_json::json!({
@@ -115,12 +90,22 @@ fn make_cors() -> Cors {
 fn main() {
     thread::sleep(time::Duration::from_millis(2000));
     let mut client = Client::connect("host=db user=postgres password=example", NoTls).unwrap();
+    client
+        .batch_execute(
+            "
+CREATE TABLE IF NOT EXISTS messages (
+    message text,
+    uuid text,
+    block boolean
+);",
+        )
+        .unwrap();
     let cfg = rocket::config::Config::build(rocket::config::Environment::Development)
         .port(80)
         .address("0.0.0.0")
         .unwrap();
     rocket::custom(cfg)
         .attach(make_cors())
-        .mount("/", routes![users, index, user])
+        .mount("/", routes![messages, index, add_message])
         .launch();
 }
